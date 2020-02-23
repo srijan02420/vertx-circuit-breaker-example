@@ -1,18 +1,13 @@
 package me.srijan.vertx_circuit_breaker_example;
 
 import io.reactivex.Flowable;
-import io.reactivex.Single;
 import io.vertx.circuitbreaker.CircuitBreakerOptions;
-import io.vertx.core.json.JsonArray;
-import io.vertx.reactivex.RxHelper;
-import io.vertx.reactivex.core.Promise;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.reactivex.circuitbreaker.CircuitBreaker;
 import io.vertx.reactivex.core.AbstractVerticle;
+import io.vertx.reactivex.core.Promise;
 import io.vertx.reactivex.core.Vertx;
-import io.vertx.reactivex.core.http.HttpServer;
-import io.vertx.reactivex.core.http.HttpServerRequest;
 import io.vertx.reactivex.core.http.HttpServerResponse;
 import io.vertx.reactivex.ext.web.Router;
 import io.vertx.reactivex.ext.web.RoutingContext;
@@ -31,10 +26,11 @@ public class Client extends AbstractVerticle {
     client = WebClient.create(vertx, webClientOptions);
 
     CircuitBreakerOptions options = new CircuitBreakerOptions()
-            .setFallbackOnFailure(true)
-            .setMaxFailures(3)
-            .setResetTimeout(5000)
-            .setTimeout(1000);
+            .setFallbackOnFailure(true) // do we call the fallback on failure
+            .setMaxFailures(3) // number of failure before opening the circuit
+            .setResetTimeout(5000) // time spent in open state before attempting to re-try
+            .setTimeout(1000)  // consider a failure if the operation does not succeed in time
+            .setMaxRetries(0); //how often the circuit breaker should try your code before failing
 
     circuitBreaker =
             CircuitBreaker.create("my-circuit-breaker", vertx, options)
@@ -47,71 +43,32 @@ public class Client extends AbstractVerticle {
     Router router = Router.router(vertx);
     router.route("/").handler(this::getSuperHeroesWithSuperPowers);
 
-    HttpServer httpServer = vertx.createHttpServer();
-
-    httpServer.requestStream()
-            .toFlowable()
-            // Pause receiving buffers
-            .map(HttpServerRequest::pause)
-            .onBackpressureDrop(req -> req.response().setStatusCode(503).end())
-            //Create a scheduler for a Vertx object, actions are executed on the event loop.
-            .observeOn(RxHelper.scheduler(vertx.getDelegate()))
-            .subscribe(req -> {
-              // Resume receiving buffers again
-              req.resume();
-              router.handle(req);
-            });
-
-    httpServer.rxListen(2222)
-            .subscribe(res -> {
-              System.out.println("started client http server");
-              startPromise.complete();
-            }, error -> {
-              System.out.println("failed to start client http server with " + error.getMessage());
-              startPromise.fail(error);
-            })
-    ;
-  }
-
-  private void getSuperPower(String hero, Promise future){
-    client.get(1111, "localhost" ,"/superpower")
-            .addQueryParam("hero", hero)
-            .rxSend()
-            .subscribe(
-                    response -> {
-                        if(response.statusCode() == 200) {
-                            future.complete(
-                                    new JsonObject()
-                                            .put("hero", hero)
-                                            .put("superpower", response.bodyAsJsonObject().getString(hero))
-                            );
-                        }
-                        else{
-                            future.fail("failed");
-                        }
-                    },
-                    throwable -> future.fail(throwable)
-            );
+    Util.startHttpServer(vertx, router, 2222, startPromise);
   }
 
   private void getSuperHeroesWithSuperPowers(RoutingContext rc) {
-    HttpServerResponse serverResponse =
+
+      //write response in chunks
+      HttpServerResponse serverResponse =
             rc.response().setChunked(true);
 
-    Single<JsonArray> single = client.get(1111, "localhost" ,"/superheroes")
+      client.get(1111, "localhost" ,"/superheroes")
             .rxSend()
-            .map(HttpResponse::bodyAsJsonArray);
-
-    single.flatMapPublisher(
-            Flowable::fromIterable
-    )
-            .flatMapSingle(hero ->
-                    circuitBreaker.rxExecuteWithFallback(
-                            future -> getSuperPower(hero.toString(), future),
-                            err -> new JsonObject()
-                                    .put("hero", hero)
-                                    .put("superpower", "null")
-                    ))
+            .map(HttpResponse::bodyAsJsonArray)
+            .flatMapPublisher(Flowable::fromIterable)
+            .flatMapSingle(hero -> {
+                            System.out.println("getting super power for " + hero);
+                            return circuitBreaker.rxExecuteWithFallback(
+                                    future -> getSuperPower(hero.toString(), future),
+                                    err -> {
+                                        System.out.println("sending fallback response for " + hero);
+                                        return new JsonObject()
+                                            .put("hero", hero)
+                                            .put("superpower", "null");
+                                    }
+                            );
+                        }
+            )
             .subscribe(
                     json -> writeChunkResponse(serverResponse, json),
                     throwable -> {
@@ -127,11 +84,37 @@ public class Client extends AbstractVerticle {
 
   }
 
+    private void getSuperPower(String hero, Promise future){
+        client.get(1111, "localhost" ,"/superpower")
+                .addQueryParam("hero", hero)
+                .rxSend()
+                .subscribe(
+                        response -> {
+                            if(response.statusCode() == 200) {
+                                future.complete(
+                                        new JsonObject()
+                                                .put("hero", hero)
+                                                .put("superpower", response.bodyAsJsonObject().getString(hero))
+                                );
+                            }
+                            else {
+                                future.fail("failed");
+                            }
+                        },
+                        throwable -> {
+                            System.out.println("get superpower request failed for "+ hero);
+                            future.fail(throwable);
+                        }
+                );
+    }
+
     public static void writeChunkResponse(HttpServerResponse response, JsonObject superHero) {
-        System.out.println("The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower"));
-        response.write(
-                "The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower") + "\n"
-        );
+        if(!response.ended()) {
+            System.out.println("The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower"));
+            response.write(
+                    "The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower") + "\n"
+            );
+        }
     }
 
   public static void main(String[] args) {

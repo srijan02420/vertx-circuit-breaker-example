@@ -3,11 +3,9 @@ package me.srijan.vertx_circuit_breaker_example;
 import io.vertx.core.Promise;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
-import io.vertx.reactivex.RxHelper;
 import io.vertx.reactivex.core.AbstractVerticle;
 import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.core.http.HttpServer;
-import io.vertx.reactivex.core.http.HttpServerRequest;
 import io.vertx.reactivex.ext.web.Router;
 import io.vertx.reactivex.ext.web.RoutingContext;
 
@@ -40,31 +38,11 @@ public class Server extends AbstractVerticle {
 
 		HttpServer httpServer = vertx.createHttpServer();
 
-		httpServer.requestStream()
-				.toFlowable()
-				// Pause receiving buffers
-				.map(HttpServerRequest::pause)
-				.onBackpressureDrop(req -> req.response().setStatusCode(503).end())
-				//Create a scheduler for a Vertx object, actions are executed on the event loop.
-				.observeOn(RxHelper.scheduler(vertx.getDelegate()))
-				.subscribe(req -> {
-					// Resume receiving buffers again
-					req.resume();
-					router.handle(req);
-				});
-
-		httpServer.rxListen(1111)
-				.subscribe(res -> {
-					System.out.println("started http server");
-					startPromise.complete();
-				}, error -> {
-					System.out.println("failed to start http server with " + error.getMessage());
-					startPromise.fail(error);
-				})
-		;
+		Util.startHttpServer(vertx, router, 1111, startPromise);
 	}
 
 	private void getSuperHeroes(RoutingContext routingContext){
+		System.out.println("getting all superheroes");
 		routingContext.response().end(Json.encodePrettily(list));
 	}
 
@@ -72,17 +50,19 @@ public class Server extends AbstractVerticle {
 		String hero = routingContext.request().getParam("hero");
 		if(hero == null || hero.isEmpty())
 			routingContext.response().setStatusCode(400).end();
-		else
+		else {
+			System.out.println("getting superpower for " + hero);
 			routingContext.response().end(
 					Json.encodePrettily(
 							new JsonObject().put(hero,
-								powers.getOrDefault(
-										routingContext.request().getParam("hero"),
-										null
-								)
+									powers.getOrDefault(
+											routingContext.request().getParam("hero"),
+											null
+									)
 							)
 					)
 			);
+		}
 	}
 
 	public static void main(String[] args) {
