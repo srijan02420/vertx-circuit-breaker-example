@@ -5,7 +5,6 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.reactivex.core.AbstractVerticle;
 import io.vertx.reactivex.core.Vertx;
-import io.vertx.reactivex.core.http.HttpServer;
 import io.vertx.reactivex.ext.web.Router;
 import io.vertx.reactivex.ext.web.RoutingContext;
 
@@ -34,9 +33,6 @@ public class Server extends AbstractVerticle {
 
 		router.get("/superheroes").handler(this::getSuperHeroes);
 		router.get("/superpower").handler(this::getSuperPower);
-//		router.get("/superpower").handler(req -> req.response().setStatusCode(503).end());
-
-		HttpServer httpServer = vertx.createHttpServer();
 
 		Util.startHttpServer(vertx, router, 1111, startPromise);
 	}
@@ -47,21 +43,28 @@ public class Server extends AbstractVerticle {
 	}
 
 	private void getSuperPower(RoutingContext routingContext){
-		String hero = routingContext.request().getParam("hero");
-		if(hero == null || hero.isEmpty())
-			routingContext.response().setStatusCode(400).end();
-		else {
-			System.out.println("getting superpower for " + hero);
-			routingContext.response().end(
-					Json.encodePrettily(
-							new JsonObject().put(hero,
-									powers.getOrDefault(
-											routingContext.request().getParam("hero"),
-											null
-									)
-							)
-					)
-			);
+		System.out.println("getting superpower for " + routingContext.request().getParam("hero"));
+		if(routingContext.request().getParam("fail").equals("true"))
+			routingContext.response().setStatusCode(503).end();
+		try {
+			Thread.sleep(200 + (int) (Math.random()*300));
+			String hero = routingContext.request().getParam("hero");
+			if(hero == null || hero.isEmpty())
+				routingContext.response().setStatusCode(400).end();
+			else {
+				routingContext.response().end(
+						Json.encodePrettily(
+								new JsonObject().put(hero,
+										powers.getOrDefault(
+												routingContext.request().getParam("hero"),
+												null
+										)
+								)
+						)
+				);
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
 	}
 

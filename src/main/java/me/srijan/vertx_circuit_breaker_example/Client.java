@@ -29,7 +29,7 @@ public class Client extends AbstractVerticle {
             .setFallbackOnFailure(true) // do we call the fallback on failure
             .setMaxFailures(3) // number of failure before opening the circuit
             .setResetTimeout(5000) // time spent in open state before attempting to re-try
-            .setTimeout(1000)  // consider a failure if the operation does not succeed in time
+            .setTimeout(4000)  // consider a failure if the operation does not succeed in time
             .setMaxRetries(0); //how often the circuit breaker should try your code before failing
 
     circuitBreaker =
@@ -57,11 +57,11 @@ public class Client extends AbstractVerticle {
             .map(HttpResponse::bodyAsJsonArray)
             .flatMapPublisher(Flowable::fromIterable)
             .flatMapSingle(hero -> {
-                            System.out.println("getting super power for " + hero);
+                            System.out.println("[PreCircuitBreaker]: trying to get super power for " + hero);
                             return circuitBreaker.rxExecuteWithFallback(
-                                    future -> getSuperPower(hero.toString(), future),
+                                    future -> getSuperPower(hero.toString(), future, rc.request().getParam("fail")),
                                     err -> {
-                                        System.out.println("sending fallback response for " + hero);
+                                        System.out.println("[CircuitBreakerFallBack]: sending fallback response for " + hero);
                                         return new JsonObject()
                                             .put("hero", hero)
                                             .put("superpower", "null");
@@ -76,7 +76,7 @@ public class Client extends AbstractVerticle {
                         rc.fail(throwable);
                     },
                     () -> {
-                        System.out.println("ended");
+                        System.out.println(":::::::::::::::::ended:::::::::::::::::");
                         if(!serverResponse.ended())
                             serverResponse.end();
                     }
@@ -84,9 +84,11 @@ public class Client extends AbstractVerticle {
 
   }
 
-    private void getSuperPower(String hero, Promise future){
+    private void getSuperPower(String hero, Promise future, String fail){
+        System.out.println("[HttpRequest]: calling server to fetch super power of " + hero);
         client.get(1111, "localhost" ,"/superpower")
                 .addQueryParam("hero", hero)
+                .addQueryParam("fail", fail)
                 .rxSend()
                 .subscribe(
                         response -> {
@@ -101,16 +103,13 @@ public class Client extends AbstractVerticle {
                                 future.fail("failed");
                             }
                         },
-                        throwable -> {
-                            System.out.println("get superpower request failed for "+ hero);
-                            future.fail(throwable);
-                        }
+                        future::fail
                 );
     }
 
     public static void writeChunkResponse(HttpServerResponse response, JsonObject superHero) {
         if(!response.ended()) {
-            System.out.println("The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower"));
+            System.out.println("[writeChunkResponse]: The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower"));
             response.write(
                     "The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower") + "\n"
             );
