@@ -45,7 +45,7 @@ public class Client extends AbstractVerticle {
             });
 
     Router router = Router.router(vertx);
-    router.route("/").handler(this::getSuperHerosWithSuperPowers);
+    router.route("/").handler(this::getSuperHeroesWithSuperPowers);
 
     HttpServer httpServer = vertx.createHttpServer();
 
@@ -94,11 +94,11 @@ public class Client extends AbstractVerticle {
             );
   }
 
-  private void getSuperHerosWithSuperPowers(RoutingContext rc) {
+  private void getSuperHeroesWithSuperPowers(RoutingContext rc) {
     HttpServerResponse serverResponse =
             rc.response().setChunked(true);
 
-    Single<JsonArray> single = client.get(1111, "localhost" ,"/superheros")
+    Single<JsonArray> single = client.get(1111, "localhost" ,"/superheroes")
             .rxSend()
             .map(HttpResponse::bodyAsJsonArray);
 

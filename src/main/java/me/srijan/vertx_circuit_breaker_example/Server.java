@@ -34,7 +34,7 @@ public class Server extends AbstractVerticle {
 
 		Router router = Router.router(this.vertx);
 
-		router.get("/superheros").handler(this::getSuperHeros);
+		router.get("/superheroes").handler(this::getSuperHeroes);
 		router.get("/superpower").handler(this::getSuperPower);
 //		router.get("/superpower").handler(req -> req.response().setStatusCode(503).end());
 
@@ -64,7 +64,7 @@ public class Server extends AbstractVerticle {
 		;
 	}
 
-	private void getSuperHeros(RoutingContext routingContext){
+	private void getSuperHeroes(RoutingContext routingContext){
 		routingContext.response().end(Json.encodePrettily(list));
 	}
 
