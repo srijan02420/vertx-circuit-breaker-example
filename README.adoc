@@ -20,3 +20,14 @@ To run your application:
 ```
 
 
+== Note
+
+Using
+```
+<dependency>
+   <groupId>io.vertx</groupId>
+   <artifactId>vertx-circuit-breaker</artifactId>
+   <version>3.9.0-SNAPSHOT</version>
+   <!-- has bug fix https://github.com/vert-x3/vertx-circuit-breaker/commit/473981b90f6ff5278d140fff3c8fe2da696dcd19-->
+</dependency>
+```
