@@ -3,6 +3,8 @@ package me.srijan.vertx_circuit_breaker_example;
 import io.reactivex.Flowable;
 import io.vertx.circuitbreaker.CircuitBreakerOptions;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.reactivex.circuitbreaker.CircuitBreaker;
 import io.vertx.reactivex.core.AbstractVerticle;
@@ -16,8 +18,11 @@ import io.vertx.reactivex.ext.web.client.WebClient;
 
 public class Client extends AbstractVerticle {
 
+  private static Logger LOG = LoggerFactory.getLogger(Client.class);
+
   WebClient client;
   CircuitBreaker circuitBreaker;
+
 
   @Override
   public void start(io.vertx.core.Promise<Void> startPromise) throws Exception {
@@ -35,9 +40,9 @@ public class Client extends AbstractVerticle {
     circuitBreaker =
             CircuitBreaker.create("my-circuit-breaker", vertx, options)
                     .openHandler(v -> {
-                      System.out.println("Circuit opened");
+                      LOG.info("Circuit opened");
                     }).closeHandler(v -> {
-              System.out.println("Circuit closed");
+                LOG.info("Circuit closed");
             });
 
     Router router = Router.router(vertx);
@@ -57,11 +62,11 @@ public class Client extends AbstractVerticle {
             .map(HttpResponse::bodyAsJsonArray)
             .flatMapPublisher(Flowable::fromIterable)
             .flatMapSingle(hero -> {
-                            System.out.println("[PreCircuitBreaker]: trying to get super power for " + hero);
+                LOG.info("[PreCircuitBreaker]: trying to get super power for " + hero);
                             return circuitBreaker.rxExecuteWithFallback(
                                     future -> getSuperPower(hero.toString(), future, rc.request().getParam("fail")),
                                     err -> {
-                                        System.out.println("[CircuitBreakerFallBack]: sending fallback response for " + hero);
+                                        LOG.error("[CircuitBreakerFallBack]: sending fallback response for " + hero);
                                         return new JsonObject()
                                             .put("hero", hero)
                                             .put("superpower", "null");
@@ -72,11 +77,11 @@ public class Client extends AbstractVerticle {
             .subscribe(
                     json -> writeChunkResponse(serverResponse, json),
                     throwable -> {
-                        System.out.println("failed with " + throwable.getMessage());
+                        LOG.error("failed with " + throwable.getMessage());
                         rc.fail(throwable);
                     },
                     () -> {
-                        System.out.println(":::::::::::::::::ended:::::::::::::::::");
+                        LOG.info(":::::::::::::::::ended:::::::::::::::::");
                         if(!serverResponse.ended())
                             serverResponse.end();
                     }
@@ -85,7 +90,7 @@ public class Client extends AbstractVerticle {
   }
 
     private void getSuperPower(String hero, Promise future, String fail){
-        System.out.println("[HttpRequest]: calling server to fetch super power of " + hero);
+        LOG.info("[HttpRequest]: calling server to fetch super power of " + hero);
         client.get(1111, "localhost" ,"/superpower")
                 .addQueryParam("hero", hero)
                 .addQueryParam("fail", fail)
@@ -109,7 +114,7 @@ public class Client extends AbstractVerticle {
 
     public static void writeChunkResponse(HttpServerResponse response, JsonObject superHero) {
         if(!response.ended()) {
-            System.out.println("[writeChunkResponse]: The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower"));
+            LOG.info("[writeChunkResponse]: The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower"));
             response.write(
                     "The super hero " + superHero.getString("hero") + " has super power " + superHero.getString("superpower") + "\n"
             );

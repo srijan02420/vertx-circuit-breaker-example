@@ -3,6 +3,8 @@ package me.srijan.vertx_circuit_breaker_example;
 import io.vertx.core.Promise;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.reactivex.core.AbstractVerticle;
 import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.ext.web.Router;
@@ -13,6 +15,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Server extends AbstractVerticle {
+
+	private static Logger LOG = LoggerFactory.getLogger(Server.class);
 
 	ArrayList<String> list = new ArrayList<>();
 
@@ -38,12 +42,12 @@ public class Server extends AbstractVerticle {
 	}
 
 	private void getSuperHeroes(RoutingContext routingContext){
-		System.out.println("getting all superheroes");
+		LOG.info("getting all superheroes");
 		routingContext.response().end(Json.encodePrettily(list));
 	}
 
 	private void getSuperPower(RoutingContext routingContext){
-		System.out.println("getting superpower for " + routingContext.request().getParam("hero"));
+		LOG.info("getting superpower for " + routingContext.request().getParam("hero"));
 		if(routingContext.request().getParam("fail").equals("true"))
 			routingContext.response().setStatusCode(503).end();
 		try {
