@@ -26,7 +26,7 @@ public class Util {
 
 		httpServer.rxListen(port)
 				.subscribe(res -> {
-					System.out.println("started client http server");
+					System.out.println("started http server");
 					startPromise.complete();
 				}, error -> {
 					System.out.println("failed to start client http server with " + error.getMessage());
